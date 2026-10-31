@@ -26,3 +26,4 @@ storage/
 # OS
 .DS_Store
 Thumbs.db
+server/src/generated/prisma/

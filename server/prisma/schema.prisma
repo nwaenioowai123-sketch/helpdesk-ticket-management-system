@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  AGENT
+  SUPERVISOR
+  ADMIN
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdTickets  Ticket[]           @relation("TicketCreator")
+  assignedTickets Ticket[]           @relation("TicketAssignee")
+  memberships     TeamMember[]
+  comments        TicketComment[]
+  ticketHistory   TicketHistory[]
+  attachments     TicketAttachment[]
+
+  @@map("users")
+}
+
+model Team {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members TeamMember[]
+  tickets Ticket[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  userId   String   @map("user_id") @db.Uuid
+  teamId   String   @map("team_id") @db.Uuid
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([userId, teamId])
+  @@index([teamId])
+  @@map("team_members")
+}
+
+model TicketCategory {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique
+
+  tickets Ticket[]
+
+  @@map("ticket_categories")
+}
+
+model SlaPolicy {
+  id                   String  @id @default(uuid()) @db.Uuid
+  name                 String  @unique
+  firstResponseMinutes Int     @map("first_response_minutes")
+  resolutionMinutes    Int     @map("resolution_minutes")
+  isActive             Boolean @default(true) @map("is_active")
+
+  tickets Ticket[]
+
+  @@map("sla_policies")
+}
+
+model Ticket {
+  id          String         @id @default(uuid()) @db.Uuid
+  ticketNo    String         @unique @map("ticket_no")
+  title       String         @db.VarChar(200)
+  description String         @db.Text
+  status      TicketStatus   @default(NEW)
+  priority    TicketPriority @default(NORMAL)
+
+  createdById  String  @map("created_by_id") @db.Uuid
+  assignedToId String? @map("assigned_to_id") @db.Uuid
+  teamId       String? @map("team_id") @db.Uuid
+  categoryId   String? @map("category_id") @db.Uuid
+  slaPolicyId  String? @map("sla_policy_id") @db.Uuid
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  resolvedAt DateTime? @map("resolved_at")
+  closedAt   DateTime? @map("closed_at")
+
+  createdBy User @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedTo User? @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  team      Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  category  TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  slaPolicy SlaPolicy?      @relation(fields: [slaPolicyId], references: [id], onDelete: SetNull)
+
+  comments    TicketComment[]
+  history     TicketHistory[]
+  attachments TicketAttachment[]
+
+  @@index([createdById, createdAt])
+  @@index([assignedToId, status])
+  @@index([teamId, status])
+  @@index([status, priority])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  ticketId   String   @map("ticket_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  body       String   @db.Text
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_comments")
+}
+
+model TicketHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  oldValue  String?  @map("old_value")
+  newValue  String?  @map("new_value")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_history")
+}
+
+model TicketAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  ticketId     String   @map("ticket_id") @db.Uuid
+  uploadedById String   @map("uploaded_by_id") @db.Uuid
+  originalName String   @map("original_name")
+  storageKey   String   @unique @map("storage_key")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
