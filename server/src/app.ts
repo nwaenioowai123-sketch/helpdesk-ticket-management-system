@@ -1,31 +1,42 @@
 
 import express from "express";
-import cors from "cors";//security package
-import helmet from "helmet";//security package
+import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
 
 import { env } from "./config/env.ts";
+
 import { healthRouter } from "./modules/health/health.routes.ts";
+import { authRouter } from "./modules/auth/auth.routes.ts";
+
 import { errorHandler } from "./middleware/error.middleware.ts";
 import { ApiError } from "./common/errors/ApiError.ts";
 
 const app = express();
 
-// Security
-app.disable("x-powered-by");//http header desible use ""
+// Security headers
+app.disable("x-powered-by");
 app.use(helmet());
 
-// CORS
+// CORS configuration
 app.use(
   cors({
     origin: env.CORS_ORIGIN,
+    credentials: true,
   })
 );
 
-// Parse JSON requests
+// Request parsing
 app.use(express.json({ limit: "1mb" }));
 
-// API routes
+// Cookie parsing
+app.use(cookieParser());
+
+// Health API
 app.use("/api/health", healthRouter);
+
+// Authentication APIs
+app.use("/api/auth", authRouter);
 
 // Unknown routes
 app.use((_req, _res, next) => {
@@ -38,7 +49,7 @@ app.use((_req, _res, next) => {
   );
 });
 
-// Centralized error handler
+// Centralized error handling
 app.use(errorHandler);
 
 export { app };
